@@ -71,7 +71,7 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 
 <div class="hd">
   <h1>📝 솔비 메모</h1>
-  <span class="ver">v1.0.0</span>
+  <span class="ver" id="ver">v1.0.1</span>
   <div class="right">
     <button class="star" id="installBtn" title="앱 설치" style="display:none">⭐</button>
   </div>
@@ -124,29 +124,56 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 let API_URL = localStorage.getItem('sobi_api') || '';
 let API_TOKEN = localStorage.getItem('sobi_token') || '';
 
-// URL 해시에서 setup 정보 받기: #setup=BASE64URL_OF_{url,token}
+// URL 해시에서 setup 정보 받기: #setup=BASE64(encodeURIComponent(JSON))
 (function(){
   const hash = location.hash;
   if (hash.startsWith('#setup=')) {
     try {
-      const d = JSON.parse(atob(decodeURIComponent(hash.slice(7))));
-      if (d.url && d.token) {
+      // 대시보드 인코딩: btoa(encodeURIComponent(JSON.stringify({url,token})))
+      // 역순: JSON.parse(decodeURIComponent(atob(...)))
+      const d = JSON.parse(decodeURIComponent(atob(hash.slice(7))));
+      if (validUrl(d.url) && validToken(d.token)) {
         localStorage.setItem('sobi_api', d.url);
         localStorage.setItem('sobi_token', d.token);
         API_URL = d.url; API_TOKEN = d.token;
         history.replaceState(null,'',location.pathname);
+      } else {
+        toast('셋업 링크 형식 오류');
       }
-    } catch(e){}
+    } catch(e){ toast('셋업 디코딩 실패: '+e.message); }
   }
 })();
 
-if (!API_URL || !API_TOKEN) { document.getElementById('setup').classList.add('on'); }
-function saveSetup(){
+function validUrl(u){ return typeof u==='string' && /^https:\/\/script\.google\.com\/.+\/exec$/.test(u); }
+function validToken(t){ return typeof t==='string' && /^[0-9a-f]{32}$/i.test(t); }
+
+if (!API_URL || !API_TOKEN || !validUrl(API_URL) || !validToken(API_TOKEN)) {
+  // 잘못된 값 있으면 비우고 setup 다시 띄움
+  if (API_URL && !validUrl(API_URL)) localStorage.removeItem('sobi_api');
+  if (API_TOKEN && !validToken(API_TOKEN)) localStorage.removeItem('sobi_token');
+  API_URL=''; API_TOKEN='';
+  document.getElementById('setup').classList.add('on');
+}
+async function saveSetup(){
   const u = document.getElementById('setupUrl').value.trim();
   const t = document.getElementById('setupToken').value.trim();
-  if (!u || !t) { toast('두 항목 모두 입력'); return; }
+  if (!validUrl(u)) { toast('URL 형식 오류 (script.google.com/.../exec)'); return; }
+  if (!validToken(t)) { toast('토큰 32자 hex 형식 아님'); return; }
+  // ping 으로 즉시 검증
+  toast('연결 테스트 중…');
+  try {
+    const resp = await fetch(u + '?api=ping&token=' + encodeURIComponent(t));
+    const j = await resp.json();
+    if (j.error) { toast('인증 실패: '+j.error); return; }
+  } catch(e) { toast('연결 실패: '+e.message); return; }
   localStorage.setItem('sobi_api', u); localStorage.setItem('sobi_token', t);
-  API_URL=u; API_TOKEN=t; document.getElementById('setup').classList.remove('on'); refreshMemos();
+  API_URL=u; API_TOKEN=t;
+  document.getElementById('setup').classList.remove('on');
+  toast('✅ 연결됨'); refreshMemos();
+}
+function resetSetup(){
+  localStorage.removeItem('sobi_api'); localStorage.removeItem('sobi_token');
+  location.reload();
 }
 
 // 설치 버튼
@@ -169,10 +196,25 @@ if ('serviceWorker' in navigator) {
 }
 
 // 공용 API 호출
+// /exec 가 POST → 302 → GET 으로 변환되면 body 가 사라지므로
+// 인증·액션은 URL 쿼리에도 함께 실어 fallback 안전망 확보
 async function callApi(action, data){
   if (!API_URL || !API_TOKEN) throw new Error('not_setup');
   const body = Object.assign({ api: action, token: API_TOKEN }, data || {});
-  const resp = await fetch(API_URL, {
+  const qs = '?api=' + encodeURIComponent(action) + '&token=' + encodeURIComponent(API_TOKEN);
+  const url = API_URL + qs;
+  // 작은 페이로드는 GET 만으로 끝(리다이렉트 영향 0)
+  const small = !data || !data.audioBase64;
+  if (small && (action==='ping' || action==='listMemos' || action==='deleteMemo' || action==='getProgress')) {
+    let g = url;
+    if (data && data.id) g += '&id=' + encodeURIComponent(data.id);
+    if (data && data.limit) g += '&limit=' + data.limit;
+    const r = await fetch(g);
+    const j = await r.json();
+    if (j.error) throw new Error(j.error);
+    return j;
+  }
+  const resp = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(body),
