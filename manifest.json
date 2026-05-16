@@ -1,0 +1,16 @@
+{
+  "name": "솔비 메모",
+  "short_name": "솔비",
+  "description": "솔비 빠른 메모 — 텍스트·녹음·실시간 STT",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f8fafc",
+  "theme_color": "#3b82f6",
+  "lang": "ko-KR",
+  "icons": [
+    { "src": "./icon-192.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "./icon-512.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

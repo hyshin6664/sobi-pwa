@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ko"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+<title>솔비 메모</title>
+<meta name="theme-color" content="#3b82f6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="솔비">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icon-192.svg">
+<link rel="apple-touch-icon" href="./icon-192.svg">
+<style>
+:root{--bg:#f8fafc;--card:#fff;--ink:#0f172a;--mut:#64748b;--bd:#e2e8f0;--blue:#3b82f6;--sky:#0ea5e9;--ok:#10b981;--err:#ef4444;--rec:#ef4444}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,'Pretendard','Segoe UI',sans-serif;display:flex;flex-direction:column}
+.hd{display:flex;align-items:center;gap:8px;padding:11px 14px;background:var(--card);border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:10}
+.hd h1{margin:0;font-size:15px}
+.ver{font-size:10px;color:var(--mut);background:#f1f5f9;padding:2px 7px;border-radius:999px}
+.hd .right{margin-left:auto;display:flex;gap:6px;align-items:center}
+.star{font-size:20px;cursor:pointer;background:transparent;border:none;padding:4px 8px;line-height:1}
+.body{flex:1;padding:12px;overflow:auto;padding-bottom:calc(100px + env(safe-area-inset-bottom))}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:11px;padding:13px;margin-bottom:10px}
+textarea#memoText{width:100%;min-height:160px;border:1px solid var(--bd);border-radius:9px;padding:11px;font:16px/1.5 inherit;resize:vertical;background:#fff}
+textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
+.rec-bar{display:none;align-items:center;gap:9px;padding:9px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:9px;color:#991b1b;font-size:13px;margin-top:8px}
+.rec-bar.on{display:flex}
+.rec-dot{width:9px;height:9px;background:var(--rec);border-radius:50%;animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.transcript{background:#f8fafc;border:1px dashed var(--bd);border-radius:8px;padding:9px;font-size:13px;color:var(--mut);min-height:38px;white-space:pre-wrap;margin-top:8px;display:none}
+.transcript.on{display:block}
+.acts{position:fixed;left:0;right:0;bottom:0;padding:10px 10px calc(10px + env(safe-area-inset-bottom));background:rgba(248,250,252,.96);backdrop-filter:blur(10px);border-top:1px solid var(--bd);display:flex;gap:8px;z-index:20}
+.btn{appearance:none;border:1px solid var(--bd);background:#fff;color:var(--ink);padding:13px 14px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent;min-height:48px}
+.btn:active{background:#f1f5f9}
+.btn:disabled{opacity:.5}
+.btn.pri{background:var(--blue);color:#fff;border-color:var(--blue);flex:1}
+.btn.rec{background:var(--rec);color:#fff;border-color:var(--rec)}
+.list{display:flex;flex-direction:column;gap:6px}
+.list .it{padding:9px 11px;background:#fff;border:1px solid var(--bd);border-radius:8px;font-size:13px;display:flex;gap:8px;align-items:center}
+.list .it.opt{background:#fff7ed;border-color:#fed7aa}
+.list .it.del{opacity:.3}
+.list .it .t{color:var(--mut);font-size:11px;min-width:84px}
+.list .it .p{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.list .it .a{color:var(--rec)}
+.list .it .x{appearance:none;border:none;background:transparent;color:var(--mut);font-size:16px;cursor:pointer;padding:4px 8px;min-width:36px;min-height:36px;border-radius:6px}
+.list .it .x:active{background:#fee2e2;color:var(--err)}
+.empty{color:var(--mut);text-align:center;padding:18px;font-size:13px}
+.toast{position:fixed;bottom:calc(80px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;z-index:30;max-width:90%}
+.toast.on{opacity:.95}
+.hint{background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;padding:9px 12px;border-radius:9px;font-size:12px;margin-bottom:10px}
+.hint code{background:#dbeafe;padding:1px 5px;border-radius:4px;font-size:11px}
+/* setup overlay */
+.setup{position:fixed;inset:0;background:rgba(15,23,42,.7);z-index:100;display:none;align-items:center;justify-content:center;padding:18px}
+.setup.on{display:flex}
+.setup .box{background:#fff;border-radius:14px;max-width:420px;width:100%;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.setup h3{margin:0 0 8px;font-size:16px}
+.setup p{margin:0 0 12px;color:var(--mut);font-size:13px;line-height:1.55}
+.setup input{width:100%;padding:11px;border:1px solid var(--bd);border-radius:9px;font:14px/1 inherit;margin-bottom:10px}
+.foot{text-align:right;font-size:10px;color:var(--mut);padding:6px 14px}
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:200;display:none;align-items:center;justify-content:center;padding:16px}
+.modal.on{display:flex}
+.modal .box{background:#fff;border-radius:13px;max-width:420px;width:100%;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.modal .hd2{display:flex;align-items:center;padding:13px 16px;border-bottom:1px solid var(--bd)}
+.modal h3{margin:0;font-size:15px}
+.modal .bd{padding:14px 16px;font-size:14px;line-height:1.6}
+.modal .ft{padding:0 16px 14px;display:flex;gap:8px;justify-content:flex-end}
+</style>
+</head>
+<body>
+
+<div class="hd">
+  <h1>📝 솔비 메모</h1>
+  <span class="ver">v1.0.0</span>
+  <div class="right">
+    <button class="star" id="installBtn" title="앱 설치" style="display:none">⭐</button>
+  </div>
+</div>
+
+<div class="body">
+  <div class="hint">💡 정리는 Claude Code에서 <code>/메모정리</code></div>
+  <div class="card">
+    <textarea id="memoText" placeholder="아이디어·일정·기억할 것·특이사항 — 두서없이 던지세요."></textarea>
+    <div class="rec-bar" id="recBar"><span class="rec-dot"></span><span>녹음 중 — <span id="recTime">00:00</span></span></div>
+    <div class="transcript" id="transcript"></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><b>대기 큐</b><span id="memoCount" style="margin-left:auto;color:var(--mut);font-size:12px">-</span></div>
+    <div class="list" id="memoList"><div class="empty">불러오는 중…</div></div>
+  </div>
+</div>
+
+<div class="acts">
+  <button class="btn rec" id="recBtn" onclick="toggleRec()" style="flex:0 0 auto">🎙</button>
+  <button class="btn pri" id="saveBtn" onclick="saveMemo()">💾 저장</button>
+</div>
+
+<div class="foot">CDN &amp; Cloud is by Solbox..</div>
+
+<!-- Setup -->
+<div class="setup" id="setup">
+  <div class="box">
+    <h3>🔑 최초 설정</h3>
+    <p>솔비 백엔드에 연결하려면 <b>API URL + 토큰</b>이 필요해요.<br>솔비 대시보드에서 <b>PWA 설정</b> 버튼을 누르면 자동 생성됩니다.</p>
+    <input id="setupUrl" placeholder="API URL (https://script.google.com/...)" />
+    <input id="setupToken" placeholder="토큰 (32자)" />
+    <button class="btn pri" onclick="saveSetup()" style="width:100%">저장 후 시작</button>
+  </div>
+</div>
+
+<!-- Confirm Modal -->
+<div class="modal" id="modal">
+  <div class="box">
+    <div class="hd2"><h3 id="mt">제목</h3><button class="btn" onclick="closeModal()" style="margin-left:auto;padding:4px 10px;min-height:auto">✕</button></div>
+    <div class="bd" id="mb"></div>
+    <div class="ft"><button class="btn" onclick="closeModal()">취소</button><button class="btn pri" id="mOk" style="flex:0">확인</button></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+let API_URL = localStorage.getItem('sobi_api') || '';
+let API_TOKEN = localStorage.getItem('sobi_token') || '';
+
+// URL 해시에서 setup 정보 받기: #setup=BASE64URL_OF_{url,token}
+(function(){
+  const hash = location.hash;
+  if (hash.startsWith('#setup=')) {
+    try {
+      const d = JSON.parse(atob(decodeURIComponent(hash.slice(7))));
+      if (d.url && d.token) {
+        localStorage.setItem('sobi_api', d.url);
+        localStorage.setItem('sobi_token', d.token);
+        API_URL = d.url; API_TOKEN = d.token;
+        history.replaceState(null,'',location.pathname);
+      }
+    } catch(e){}
+  }
+})();
+
+if (!API_URL || !API_TOKEN) { document.getElementById('setup').classList.add('on'); }
+function saveSetup(){
+  const u = document.getElementById('setupUrl').value.trim();
+  const t = document.getElementById('setupToken').value.trim();
+  if (!u || !t) { toast('두 항목 모두 입력'); return; }
+  localStorage.setItem('sobi_api', u); localStorage.setItem('sobi_token', t);
+  API_URL=u; API_TOKEN=t; document.getElementById('setup').classList.remove('on'); refreshMemos();
+}
+
+// 설치 버튼
+let deferred = null;
+window.addEventListener('beforeinstallprompt', e=>{
+  e.preventDefault(); deferred = e;
+  document.getElementById('installBtn').style.display = '';
+});
+document.getElementById('installBtn').addEventListener('click', async ()=>{
+  if (!deferred) { toast('이미 설치되었거나 지원되지 않음'); return; }
+  deferred.prompt();
+  await deferred.userChoice;
+  deferred = null;
+  document.getElementById('installBtn').style.display = 'none';
+});
+
+// SW 등록
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(()=>{});
+}
+
+// 공용 API 호출
+async function callApi(action, data){
+  if (!API_URL || !API_TOKEN) throw new Error('not_setup');
+  const body = Object.assign({ api: action, token: API_TOKEN }, data || {});
+  const resp = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(body),
+    mode: 'cors'
+  });
+  const json = await resp.json();
+  if (json.error) throw new Error(json.error);
+  return json;
+}
+
+// 토스트
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('on'); clearTimeout(t._x); t._x=setTimeout(()=>t.classList.remove('on'),1800); }
+
+// 모달
+function showConfirm(title, msg, onOk){
+  document.getElementById('mt').textContent = title;
+  document.getElementById('mb').innerHTML = esc(msg);
+  document.getElementById('modal').classList.add('on');
+  document.getElementById('mOk').onclick = ()=>{ closeModal(); onOk && onOk(); };
+}
+function closeModal(){ document.getElementById('modal').classList.remove('on'); }
+function esc(s){ return (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+// 녹음 + STT
+let mediaRec=null, mediaChunks=[], recStart=0, recTimer=null, audioBlob=null, audioMime='audio/webm';
+let speechRec=null, transcriptBuf='', speechActive=false;
+function toggleRec(){ if (mediaRec && mediaRec.state==='recording') stopRec(); else startRec(); }
+async function startRec(){
+  if (!navigator.mediaDevices) { toast('녹음 미지원'); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    audioMime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+    mediaRec = new MediaRecorder(stream, { mimeType: audioMime });
+    mediaChunks=[]; audioBlob=null;
+    mediaRec.ondataavailable = e => { if (e.data && e.data.size > 0) mediaChunks.push(e.data); };
+    mediaRec.onstop = ()=>{
+      audioBlob = new Blob(mediaChunks, { type: audioMime });
+      stream.getTracks().forEach(t=>t.stop());
+      document.getElementById('recBar').classList.remove('on');
+      document.getElementById('recBtn').textContent='🎙';
+      clearInterval(recTimer); stopSpeech();
+      toast('녹음 완료');
+    };
+    mediaRec.start(); recStart = Date.now();
+    document.getElementById('recBar').classList.add('on');
+    document.getElementById('recBtn').textContent='⏹';
+    recTimer = setInterval(()=>{
+      const s = Math.floor((Date.now()-recStart)/1000);
+      document.getElementById('recTime').textContent = String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+    }, 500);
+    startSpeech();
+  } catch (e) { toast('마이크 권한 필요'); }
+}
+function stopRec(){ if (mediaRec) mediaRec.stop(); }
+function startSpeech(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return;
+  speechRec = new SR();
+  speechRec.continuous = true; speechRec.interimResults = true; speechRec.lang = 'ko-KR';
+  transcriptBuf=''; const el=document.getElementById('transcript');
+  el.classList.add('on'); el.textContent='(인식 대기…)';
+  speechActive = true;
+  speechRec.onresult = e=>{
+    let interim='';
+    for (let i=e.resultIndex; i<e.results.length; i++){
+      if (e.results[i].isFinal) transcriptBuf += e.results[i][0].transcript + ' ';
+      else interim += e.results[i][0].transcript;
+    }
+    el.textContent = transcriptBuf + (interim ? '… '+interim : '');
+  };
+  speechRec.onerror = ()=>{};
+  speechRec.onend = ()=>{ if (speechActive) try{ speechRec.start(); }catch(e){} };
+  try { speechRec.start(); } catch(e){}
+}
+function stopSpeech(){ speechActive=false; try{ speechRec && speechRec.stop(); }catch(e){} }
+function blobToBase64(blob){
+  return new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result.split(',')[1]); fr.readAsDataURL(blob); });
+}
+
+let saving=false;
+async function saveMemo(){
+  if (saving) return;
+  const text = document.getElementById('memoText').value.trim();
+  const transcript = transcriptBuf.trim();
+  if (!text && !transcript && !audioBlob) { toast('내용 입력하거나 녹음하세요'); return; }
+  saving=true;
+  const saveBtn = document.getElementById('saveBtn');
+  saveBtn.disabled = true;
+  const optId = 'opt_'+Date.now();
+  const preview = (text || transcript).substring(0,80);
+  prependOpt(optId, preview, !!audioBlob);
+  document.getElementById('memoText').value='';
+  const la = audioBlob, lm = audioMime;
+  const ld = audioBlob ? Math.floor((Date.now()-recStart)/1000) : 0;
+  document.getElementById('transcript').classList.remove('on');
+  document.getElementById('transcript').textContent='';
+  transcriptBuf=''; audioBlob=null; mediaChunks=[];
+  toast('저장 중…');
+  const payload = { text, transcript, source: la?'voice':'text', durationSec: ld };
+  if (la) { payload.audioBase64 = await blobToBase64(la); payload.audioMime = lm; }
+  try {
+    const r = await callApi('saveMemo', payload);
+    toast('✅ 저장됨');
+    refreshMemos();
+  } catch(e) {
+    toast('실패: '+e.message);
+    const el = document.getElementById(optId); if (el) el.remove();
+  } finally {
+    saving=false; saveBtn.disabled=false;
+  }
+}
+function prependOpt(id, preview, hasAudio){
+  const el = document.getElementById('memoList');
+  if (el.querySelector('.empty')) el.innerHTML='';
+  const t = new Date().toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const n = document.createElement('div');
+  n.className='it opt'; n.id=id;
+  n.innerHTML = '<span class="t">'+t+'</span><span class="p">'+esc(preview)+'</span>'+(hasAudio?'<span class="a">🎙</span>':'')+'<span style="color:var(--mut);font-size:11px">저장중</span>';
+  el.insertBefore(n, el.firstChild);
+}
+async function refreshMemos(){
+  if (!API_URL || !API_TOKEN) return;
+  try {
+    const r = await callApi('listMemos', { limit: 50 });
+    document.getElementById('memoCount').textContent = (r.pending||0)+'건';
+    const el = document.getElementById('memoList');
+    if (!r.items || !r.items.length) { el.innerHTML='<div class="empty">대기 메모 없음</div>'; return; }
+    el.innerHTML = r.items.map(m=>{
+      const t = new Date(m.createdAt).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+      const a = m.hasAudio ? '<span class="a">🎙</span>' : '';
+      return '<div class="it"><span class="t">'+t+'</span><span class="p">'+esc(m.preview||'(빈 메모)')+'</span>'+a+'<button class="x" onclick="delMemo(\''+m.id+'\',this)">🗑</button></div>';
+    }).join('');
+  } catch(e) { toast('큐 조회 실패: '+e.message); }
+}
+function delMemo(id, btn){
+  const node = btn.closest('.it');
+  showConfirm('🗑 메모 삭제', '이 메모를 삭제할까요? (휴지통으로 이동)', async ()=>{
+    node.classList.add('del');
+    try { await callApi('deleteMemo', { id }); node.remove(); toast('🗑 삭제됨'); refreshMemos(); }
+    catch(e){ node.classList.remove('del'); toast('실패: '+e.message); }
+  });
+}
+
+if (API_URL && API_TOKEN) refreshMemos();
+</script>
+</body></html>
