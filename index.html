@@ -85,7 +85,7 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 
 <div class="hd">
   <h1>📝 솔비 메모</h1>
-  <span class="ver" id="ver">v1.4.0</span>
+  <span class="ver" id="ver">v1.4.1</span>
   <div class="right">
     <button class="star" id="installBtn" title="앱 설치" style="display:none">⭐</button>
   </div>
@@ -503,7 +503,7 @@ async function refreshMemos(){
     const el = document.getElementById('memoList');
     if (!r.items || !r.items.length) { el.innerHTML='<div class="empty">대기 메모 없음</div>'; return; }
     el.innerHTML = r.items.map(m=>{
-      const t = new Date(m.createdAt).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+      const t = new Date(m.createdAt).toLocaleString('ko-KR',{year:'2-digit',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
       const a = m.hasAudio ? '<span class="a">🎙</span>' : '';
       return '<div class="it"><span class="t">'+t+'</span><span class="p">'+esc(m.preview||'(빈 메모)')+'</span>'+a+'<button class="x" onclick="delMemo(\''+m.id+'\',this)">🗑</button></div>';
     }).join('');
