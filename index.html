@@ -85,7 +85,7 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 
 <div class="hd">
   <h1>📝 솔비 메모</h1>
-  <span class="ver" id="ver">v2.1.0</span>
+  <span class="ver" id="ver">v2.2.0</span>
   <div class="right">
     <button class="star" onclick="copyContext()" title="새 Claude 세션 컨텍스트 복사" style="font-size:16px">🔗</button>
     <button class="star" id="installBtn" title="앱 설치" style="display:none">⭐</button>
@@ -129,8 +129,12 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 
   <div class="pane" id="paneDaily">
     <div class="card">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b>📅 일일 솔비보고서</b><span id="dCount" style="margin-left:auto;color:var(--mut);font-size:12px">-</span></div>
-      <div style="color:var(--mut);font-size:12px">오늘이 항상 맨 위. 매일 06:00 자동 생성 + 첫 응답 시 보강.</div>
+      <div style="display:flex;gap:4px;margin-bottom:8px">
+        <button class="btn" id="dTabIssue" onclick="dSwitch('issue')" style="flex:1;padding:9px;font-size:13px;background:var(--blue);color:#fff;border-color:var(--blue)">📋 이슈</button>
+        <button class="btn" id="dTabPerson" onclick="dSwitch('person')" style="flex:1;padding:9px;font-size:13px">👥 인원</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px"><b id="dTitle">📋 일일 이슈</b><span id="dCount" style="margin-left:auto;color:var(--mut);font-size:12px">-</span></div>
+      <div style="color:var(--mut);font-size:12px;margin-top:4px" id="dHint">오늘이 항상 맨 위. 매일 06:00 자동 생성 + 첫 응답 시 보강.</div>
     </div>
     <div id="dList" style="display:flex;flex-direction:column;gap:8px;margin-top:8px"><div class="empty">불러오는 중…</div></div>
   </div>
@@ -688,32 +692,63 @@ function pwaTab(el){
   if (el.dataset.pane==='paneDaily') refreshDaily();
 }
 
-// ===== 📅 일일 보고서 (할일 탭 교체) =====
-let dailyCache = [];
+// ===== 📅 일일 (이슈/인원 서브탭) =====
+let dailyAllItems = [];
+let dailyMode = 'issue'; // 'issue' | 'person'
+
+function dSwitch(mode){
+  dailyMode = mode;
+  const btnI = document.getElementById('dTabIssue');
+  const btnP = document.getElementById('dTabPerson');
+  if (mode==='issue') {
+    btnI.style.background='var(--blue)'; btnI.style.color='#fff'; btnI.style.borderColor='var(--blue)';
+    btnP.style.background='#fff'; btnP.style.color='var(--ink)'; btnP.style.borderColor='var(--bd)';
+    document.getElementById('dTitle').textContent='📋 일일 이슈';
+    document.getElementById('dHint').textContent='오늘이 항상 맨 위. 매일 06:00 자동 생성 + 첫 응답 시 보강.';
+  } else {
+    btnP.style.background='var(--blue)'; btnP.style.color='#fff'; btnP.style.borderColor='var(--blue)';
+    btnI.style.background='#fff'; btnI.style.color='var(--ink)'; btnI.style.borderColor='var(--bd)';
+    document.getElementById('dTitle').textContent='👥 인원 보고서';
+    document.getElementById('dHint').textContent='팀원·임원 사람별 솔비보고서. 클릭 → 담당·일정·키워드.';
+  }
+  renderDaily();
+}
+
 async function refreshDaily(){
   document.getElementById('dList').innerHTML = '<div class="empty">불러오는 중…</div>';
   try {
     const r = await callApi('listIssues', {});
-    // 일일 보고서 = title에 "일일" 포함 OR category가 '일일' OR '조사보고서'+title에 날짜
-    dailyCache = (r.items||[]).filter(it => {
-      const t = it.title || '';
-      return t.includes('일일') || t.includes('📅') || it.category==='일일';
-    });
-    // 최신순 (오늘이 맨 위)
-    dailyCache.sort((a,b) => (b.updatedAt||'').localeCompare(a.updatedAt||''));
+    dailyAllItems = r.items||[];
     renderDaily();
   } catch(e) { document.getElementById('dList').innerHTML = '<div class="empty">실패: '+esc(e.message)+'</div>'; }
 }
+
 function renderDaily(){
-  document.getElementById('dCount').textContent = dailyCache.length+'건';
+  let items;
+  if (dailyMode==='issue') {
+    items = dailyAllItems.filter(it => {
+      const t = it.title || '';
+      return (t.includes('일일') || t.startsWith('📅')) && !t.startsWith('👤') && !t.startsWith('👔');
+    });
+  } else {
+    items = dailyAllItems.filter(it => {
+      const t = it.title || '';
+      return t.startsWith('👤') || t.startsWith('👔');
+    });
+  }
+  items.sort((a,b) => (b.updatedAt||'').localeCompare(a.updatedAt||''));
+  document.getElementById('dCount').textContent = items.length+'건';
   const el = document.getElementById('dList');
-  if (!dailyCache.length) { el.innerHTML='<div class="empty">일일 보고서 없음</div>'; return; }
+  if (!items.length) { el.innerHTML='<div class="empty">'+(dailyMode==='issue'?'일일 보고서 없음':'인원 보고서 없음')+'</div>'; return; }
   const today = new Date().toISOString().slice(0,10);
-  el.innerHTML = dailyCache.map((it, idx) => {
-    const isToday = (it.updatedAt||'').slice(0,10) === today || (it.createdAt||'').slice(0,10) === today;
+  el.innerHTML = items.map(it => {
+    const isToday = dailyMode==='issue' && ((it.updatedAt||'').slice(0,10) === today || (it.createdAt||'').slice(0,10) === today);
     const upd = it.updatedAt ? new Date(it.updatedAt).toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'}) : '';
     const badge = isToday ? '<span style="background:#3b82f6;color:#fff;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;margin-right:6px">오늘</span>' : '';
-    return '<div onclick="openReport(\''+esc(it.id)+'\')" style="cursor:pointer;padding:12px 14px;background:#fff;border:'+(isToday?'2px solid #3b82f6':'1px solid var(--bd)')+';border-radius:10px;'+(isToday?'box-shadow:0 2px 8px rgba(59,130,246,0.15)':'')+'">'+
+    const isExec = (it.title||'').startsWith('👔');
+    const personBg = dailyMode==='person' ? (isExec ? '#fef3c7' : '#dbeafe') : '#fff';
+    const personBorder = dailyMode==='person' ? (isExec ? '#fde68a' : '#bfdbfe') : 'var(--bd)';
+    return '<div onclick="openReport(\''+esc(it.id)+'\')" style="cursor:pointer;padding:12px 14px;background:'+(isToday?'#fff':personBg)+';border:'+(isToday?'2px solid #3b82f6':'1px solid '+personBorder)+';border-radius:10px;'+(isToday?'box-shadow:0 2px 8px rgba(59,130,246,0.15)':'')+'">'+
       '<div style="margin-bottom:5px">'+badge+'<span style="font-weight:700;font-size:14px">'+esc(it.title)+'</span><span style="color:var(--mut);font-size:11px;float:right">'+upd+'</span></div>'+
       (it.summary?'<div style="color:var(--mut);font-size:12px;line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical">'+esc(it.summary)+'</div>':'')+
     '</div>';
