@@ -85,7 +85,7 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 
 <div class="hd">
   <h1>📝 솔비 메모</h1>
-  <span class="ver" id="ver">v1.9.0</span>
+  <span class="ver" id="ver">v2.0.0</span>
   <div class="right">
     <button class="star" onclick="copyContext()" title="새 Claude 세션 컨텍스트 복사" style="font-size:16px">🔗</button>
     <button class="star" id="installBtn" title="앱 설치" style="display:none">⭐</button>
@@ -574,54 +574,80 @@ function renderFilePreview(){
   ).join('');
 }
 function removeFile(i){ pendingFiles.splice(i,1); renderFilePreview(); }
-// 파일 청크 업로드
-async function uploadFileChunks(memoId, blob, mime, name){
-  const b64 = await blobToBase64(blob);
-  const CHUNK = 5000;
-  const init = await callApi('fileInit', {});
+// 공통 청크 업로더 — 100KB 청크, 5개 병렬, 3회 재시도, 진행률 toast
+// kind: 'audio'|'image'|'file'
+async function uploadChunks(kind, memoId, b64, opts){
+  const CHUNK = 100000; // 100KB (Drive 임시 파일 방식이라 한도 큼)
+  const PARALLEL = 5;
+  const RETRIES = 3;
+  const label = kind==='audio' ? '🎙' : kind==='image' ? '📎' : '📄';
+  const init = await callApi(kind+'Init', {});
   const sid = init.sid;
   const total = Math.ceil(b64.length / CHUNK);
+  let done = 0;
+  const tasks = [];
   for (let i = 0; i < total; i++) {
-    const part = b64.slice(i*CHUNK, (i+1)*CHUNK);
-    const r = await callApi('fileChunk', { sid, seq:i, data:part });
-    if (r.error) throw new Error('file chunk '+i+': '+r.error);
+    const seq = i;
+    const part = b64.slice(seq*CHUNK, (seq+1)*CHUNK);
+    tasks.push({ seq, part });
   }
-  const fin = await callApi('fileFinal', { sid, memoId, mime, name });
-  if (fin.error) throw new Error('file final: '+fin.error);
+  // 진행률 toast (10%마다)
+  let lastPct = -1;
+  const updatePct = () => {
+    const pct = Math.floor(done/total*100);
+    if (pct !== lastPct && (pct - lastPct >= 10 || pct === 100)) {
+      lastPct = pct; toast(label+' '+pct+'% ('+done+'/'+total+')');
+    }
+  };
+  // 병렬 워커
+  let cursor = 0;
+  async function worker(){
+    while (cursor < tasks.length) {
+      const t = tasks[cursor++];
+      let attempt = 0, ok = false;
+      while (attempt < RETRIES && !ok) {
+        try {
+          const r = await callApi(kind+'Chunk', { sid, seq:t.seq, data:t.part });
+          if (r.error) throw new Error(r.error);
+          ok = true;
+        } catch(e) {
+          attempt++;
+          if (attempt >= RETRIES) throw new Error('chunk '+t.seq+' 최종실패: '+e.message);
+          await new Promise(r=>setTimeout(r, 500*Math.pow(3,attempt-1))); // 500ms,1.5s,4.5s
+        }
+      }
+      done++; updatePct();
+    }
+  }
+  const workers = [];
+  for (let w = 0; w < Math.min(PARALLEL, total); w++) workers.push(worker());
+  await Promise.all(workers);
+  const finalParams = Object.assign({ sid, memoId }, opts||{});
+  const fin = await callApi(kind+'Final', finalParams);
+  if (fin.error) {
+    if (fin.error === 'missing_chunks' && fin.missing && fin.missing.length) {
+      // 누락 청크 자동 재전송
+      toast('🔁 누락 청크 '+fin.missing.length+'개 재전송 중…');
+      for (const seq of fin.missing) {
+        const part = b64.slice(seq*CHUNK, (seq+1)*CHUNK);
+        await callApi(kind+'Chunk', { sid, seq, data: part });
+      }
+      const fin2 = await callApi(kind+'Final', finalParams);
+      if (fin2.error) throw new Error('final 재시도 실패: '+fin2.error);
+      return fin2;
+    }
+    throw new Error('final: '+fin.error);
+  }
   return fin;
 }
-
-// 이미지 청크 업로드 (audio 패턴 그대로 + image* API)
+async function uploadAudioChunks(memoId, b64, mime){ return uploadChunks('audio', memoId, b64, { mime }); }
 async function uploadImageChunks(memoId, blob, mime){
   const b64 = await blobToBase64(blob);
-  const CHUNK = 5000;
-  const init = await callApi('imageInit', {});
-  const sid = init.sid;
-  const total = Math.ceil(b64.length / CHUNK);
-  for (let i = 0; i < total; i++) {
-    const part = b64.slice(i*CHUNK, (i+1)*CHUNK);
-    const r = await callApi('imageChunk', { sid, seq:i, data:part });
-    if (r.error) throw new Error('img chunk '+i+': '+r.error);
-  }
-  const fin = await callApi('imageFinal', { sid, memoId, mime });
-  if (fin.error) throw new Error('img final: '+fin.error);
-  return fin;
+  return uploadChunks('image', memoId, b64, { mime });
 }
-
-// 오디오 청크 업로드 — callApi POST 경로 사용 (작은 body는 redirect 손실 없음)
-async function uploadAudioChunks(memoId, b64, mime){
-  const CHUNK = 5000; // POST body ~5KB
-  const init = await callApi('audioInit', {});
-  const sid = init.sid;
-  const total = Math.ceil(b64.length / CHUNK);
-  for (let i = 0; i < total; i++) {
-    const part = b64.slice(i*CHUNK, (i+1)*CHUNK);
-    const r = await callApi('audioChunk', { sid, seq:i, data:part });
-    if (r.error) throw new Error('chunk '+i+': '+r.error);
-  }
-  const fin = await callApi('audioFinal', { sid, memoId, mime });
-  if (fin.error) throw new Error('final: '+fin.error);
-  return fin;
+async function uploadFileChunks(memoId, blob, mime, name){
+  const b64 = await blobToBase64(blob);
+  return uploadChunks('file', memoId, b64, { mime, name });
 }
 function prependOpt(id, preview, hasAudio){
   const el = document.getElementById('memoList');
