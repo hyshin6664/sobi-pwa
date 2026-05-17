@@ -85,7 +85,7 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 
 <div class="hd">
   <h1>📝 솔비 메모</h1>
-  <span class="ver" id="ver">v1.5.1</span>
+  <span class="ver" id="ver">v1.6.0</span>
   <div class="right">
     <button class="star" id="installBtn" title="앱 설치" style="display:none">⭐</button>
   </div>
@@ -149,6 +149,7 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 
 <div class="acts" id="memoActs">
   <button class="btn rec" id="recBtn" onclick="toggleRec()" style="flex:0 0 auto">🎙</button>
+  <button class="btn" id="longRecBtn" onclick="toggleLongRec()" style="flex:0 0 auto;background:#7c3aed;color:#fff;border-color:#7c3aed" title="장기 녹음 (1시간씩 자동 저장)">🔴∞</button>
   <button class="btn pri" id="saveBtn" onclick="saveMemo()">💾 저장</button>
 </div>
 
@@ -401,6 +402,73 @@ async function saveMemo(){
   } finally {
     saving=false; saveBtn.disabled=false;
   }
+}
+
+// ===== 장기 녹음 (1시간씩 자동 저장 + wake-lock) =====
+// ⚠️ 모바일 OS 정책상 화면이 꺼지면 마이크 차단. wake-lock으로 화면 유지.
+// 폰을 충전기 꽂아둔 상태 + 앱 화면 켜진 상태에서 무제한 녹음 + 1시간마다 자동 저장.
+let longRecActive = false, longRecStream = null, longRecRec = null, longRecChunks = [];
+let longRecStart = 0, longRecRotateTimer = null, wakeLock = null;
+const LONG_REC_ROTATE_MS = 60 * 60 * 1000; // 1시간
+async function toggleLongRec(){
+  if (longRecActive) await stopLongRec();
+  else await startLongRec();
+}
+async function startLongRec(){
+  if (!navigator.mediaDevices) { toast('녹음 미지원'); return; }
+  try {
+    longRecStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    // wake-lock — 화면 꺼지지 않게
+    if ('wakeLock' in navigator) {
+      try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
+    }
+    longRecActive = true;
+    longRecStart = Date.now();
+    startNewLongChunk();
+    // 1시간마다 자동 회전 (저장 + 새 녹음)
+    longRecRotateTimer = setInterval(rotateLongChunk, LONG_REC_ROTATE_MS);
+    document.getElementById('longRecBtn').textContent = '⏹ 장기녹음 중';
+    document.getElementById('longRecBtn').style.background = '#dc2626';
+    toast('🔴 장기 녹음 시작 — 1시간마다 자동 저장 (화면 켜두세요)');
+  } catch (e) { toast('마이크/wake-lock 실패: '+e.message); }
+}
+function startNewLongChunk(){
+  if (!longRecStream) return;
+  longRecChunks = [];
+  const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+  longRecRec = new MediaRecorder(longRecStream, { mimeType: mime });
+  longRecRec.ondataavailable = e => { if (e.data && e.data.size > 0) longRecChunks.push(e.data); };
+  longRecRec.onstop = async () => {
+    if (!longRecChunks.length) return;
+    const blob = new Blob(longRecChunks, { type: longRecRec.mimeType });
+    const dur = Math.floor((Date.now()-longRecStart)/1000);
+    const startedAt = new Date(longRecStart).toISOString();
+    // 메모 생성 + 오디오 청크 업로드
+    try {
+      const meta = await callApi('saveMemo', { text:'[🔴 장기녹음] '+new Date(longRecStart).toLocaleString('ko-KR')+' ~ '+dur+'초', transcript:'', source:'voice', durationSec:dur });
+      const b64 = await blobToBase64(blob);
+      await uploadAudioChunks(meta.id, b64, longRecRec.mimeType);
+      toast('💾 1시간 청크 저장됨');
+    } catch(e){ toast('청크 저장 실패: '+e.message); }
+  };
+  longRecRec.start(5000); // 5초마다 chunk 모음
+  longRecStart = Date.now();
+}
+async function rotateLongChunk(){
+  if (!longRecRec) return;
+  longRecRec.stop();
+  // stop은 비동기로 onstop 실행 — 잠시 대기 후 새 녹음
+  setTimeout(startNewLongChunk, 500);
+}
+async function stopLongRec(){
+  longRecActive = false;
+  clearInterval(longRecRotateTimer); longRecRotateTimer = null;
+  if (longRecRec && longRecRec.state==='recording') longRecRec.stop();
+  if (longRecStream) longRecStream.getTracks().forEach(t=>t.stop());
+  if (wakeLock) { try { await wakeLock.release(); } catch(_){}; wakeLock = null; }
+  document.getElementById('longRecBtn').textContent = '🔴∞';
+  document.getElementById('longRecBtn').style.background = '#7c3aed';
+  toast('⏹ 장기 녹음 종료');
 }
 
 // ===== 위치 캡처 =====
