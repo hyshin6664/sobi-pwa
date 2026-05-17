@@ -85,7 +85,7 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 
 <div class="hd">
   <h1>📝 솔비 메모</h1>
-  <span class="ver" id="ver">v1.2.1</span>
+  <span class="ver" id="ver">v1.3.0</span>
   <div class="right">
     <button class="star" id="installBtn" title="앱 설치" style="display:none">⭐</button>
   </div>
@@ -358,10 +358,18 @@ async function saveMemo(){
   transcriptBuf=''; audioBlob=null; mediaChunks=[];
   toast('저장 중…');
   const payload = { text, transcript, source: la?'voice':'text', durationSec: ld };
-  if (la) { payload.audioBase64 = await blobToBase64(la); payload.audioMime = lm; }
+  // 텍스트 메타 먼저 저장 (audio 없이) — POST 본문 손실 영향 없는 쿼리만으로 가능
   try {
     const r = await callApi('saveMemo', payload);
-    toast('✅ 저장됨');
+    if (la) {
+      // 메모 id 반환받음 — audio 청크 업로드
+      toast('🎙 오디오 업로드 중…');
+      const b64 = await blobToBase64(la);
+      await uploadAudioChunks(r.id, b64, lm);
+      toast('✅ 저장됨 (음성 포함)');
+    } else {
+      toast('✅ 저장됨');
+    }
     refreshMemos();
   } catch(e) {
     toast('실패: '+e.message);
@@ -369,6 +377,25 @@ async function saveMemo(){
   } finally {
     saving=false; saveBtn.disabled=false;
   }
+}
+
+// 오디오 청크 업로드 (GET 쿼리만 사용 → POST 302 본문 손실 우회)
+async function uploadAudioChunks(memoId, b64, mime){
+  const CHUNK = 3500; // 안전선: URL 전체 ~5KB 이내
+  const init = await callApi('audioInit', {});
+  const sid = init.sid;
+  const total = Math.ceil(b64.length / CHUNK);
+  for (let i = 0; i < total; i++) {
+    const part = b64.slice(i*CHUNK, (i+1)*CHUNK);
+    const u = API_URL + '?api=audioChunk&token=' + encodeURIComponent(API_TOKEN) +
+      '&sid=' + sid + '&seq=' + i + '&data=' + encodeURIComponent(part);
+    const r = await fetch(u);
+    const j = await r.json();
+    if (j.error) throw new Error('chunk '+i+': '+j.error);
+  }
+  const fin = await callApi('audioFinal', { sid, memoId, mime });
+  if (fin.error) throw new Error('final: '+fin.error);
+  return fin;
 }
 function prependOpt(id, preview, hasAudio){
   const el = document.getElementById('memoList');
