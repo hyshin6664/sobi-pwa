@@ -84,7 +84,7 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 
 <div class="hd">
   <h1>📝 솔비 메모</h1>
-  <span class="ver" id="ver">v1.1.0</span>
+  <span class="ver" id="ver">v1.2.0</span>
   <div class="right">
     <button class="star" id="installBtn" title="앱 설치" style="display:none">⭐</button>
   </div>
@@ -112,18 +112,22 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 
   <div class="pane" id="paneReport">
     <div class="card">
+      <div style="display:flex;gap:4px;margin-bottom:8px">
+        <button class="btn" id="rTabReport" onclick="rSwitch('report')" style="flex:1;padding:9px;font-size:13px;background:var(--blue);color:#fff;border-color:var(--blue)">📊 조사보고서</button>
+        <button class="btn" id="rTabIssue" onclick="rSwitch('issue')" style="flex:1;padding:9px;font-size:13px">🐛 이슈</button>
+      </div>
       <div style="display:flex;gap:6px;margin-bottom:8px">
         <input id="rSearch" placeholder="검색" oninput="renderReports()" style="flex:1;padding:9px 11px;border:1px solid var(--bd);border-radius:8px;font:14px inherit">
         <select id="rFilter" onchange="renderReports()" style="padding:8px;border:1px solid var(--bd);border-radius:8px;font:13px inherit;background:#fff">
+          <option value="">전체상태</option>
           <option value="open">활성</option>
-          <option value="">전체</option>
           <option value="미해결">미해결</option>
           <option value="진행중">진행중</option>
           <option value="해결">해결</option>
           <option value="보류">보류</option>
         </select>
       </div>
-      <div style="display:flex;align-items:center;gap:8px"><b>이슈 / 보고서</b><span id="rCount" style="margin-left:auto;color:var(--mut);font-size:12px">-</span></div>
+      <div style="display:flex;align-items:center;gap:8px"><b id="rTitle">조사보고서</b><span id="rCount" style="margin-left:auto;color:var(--mut);font-size:12px">-</span></div>
     </div>
     <div id="rList"><div class="empty">불러오는 중…</div></div>
   </div>
@@ -412,6 +416,41 @@ function pwaTab(el){
 
 // ===== 보고서 =====
 let reportCache = [];
+let rMode = 'report'; // 'report' = 조사보고서, 'issue' = 이슈
+function rSwitch(mode){
+  rMode = mode;
+  document.getElementById('rTabReport').style.background = mode==='report' ? 'var(--blue)' : '#fff';
+  document.getElementById('rTabReport').style.color = mode==='report' ? '#fff' : 'var(--ink)';
+  document.getElementById('rTabReport').style.borderColor = mode==='report' ? 'var(--blue)' : 'var(--bd)';
+  document.getElementById('rTabIssue').style.background = mode==='issue' ? 'var(--blue)' : '#fff';
+  document.getElementById('rTabIssue').style.color = mode==='issue' ? '#fff' : 'var(--ink)';
+  document.getElementById('rTabIssue').style.borderColor = mode==='issue' ? 'var(--blue)' : 'var(--bd)';
+  document.getElementById('rTitle').textContent = mode==='report' ? '조사보고서' : '이슈';
+  // 모드 바뀌면 활성 필터를 조사보고서일 땐 전체, 이슈일 땐 활성 디폴트
+  document.getElementById('rFilter').value = mode==='report' ? '' : 'open';
+  renderReports();
+}
+// 간단 마크다운 → HTML (이미지·링크·굵게·코드·헤더·줄바꿈)
+function md2html(s){
+  if (!s) return '';
+  let h = esc(s);
+  // ![alt](url) — 이미지
+  h = h.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, (_,a,u)=>'<img src="'+u+'" alt="'+a+'" style="max-width:100%;border-radius:8px;margin:6px 0;display:block">');
+  // [text](url) — 링크
+  h = h.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_,t,u)=>'<a href="'+u+'" target="_blank" style="color:var(--blue);text-decoration:underline">'+t+'</a>');
+  // 단독 URL → 링크
+  h = h.replace(/(^|[\s>])(https?:\/\/[^\s<]+)/g, (m,p,u)=>p+'<a href="'+u+'" target="_blank" style="color:var(--blue);text-decoration:underline">'+u+'</a>');
+  // **bold**
+  h = h.replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
+  // 헤더 ## ###
+  h = h.replace(/^###\s+(.+)$/gm, '<div style="font-size:14px;font-weight:700;margin:10px 0 4px;color:var(--ink)">$1</div>');
+  h = h.replace(/^##\s+(.+)$/gm, '<div style="font-size:15px;font-weight:700;margin:12px 0 6px;color:var(--ink);border-bottom:1px solid var(--bd);padding-bottom:3px">$1</div>');
+  // - 리스트
+  h = h.replace(/^[\-•]\s+(.+)$/gm, '<div style="padding-left:14px;position:relative;line-height:1.6"><span style="position:absolute;left:2px">•</span>$1</div>');
+  // 줄바꿈
+  h = h.replace(/\n/g, '<br>');
+  return h;
+}
 async function refreshReports(){
   document.getElementById('rList').innerHTML = '<div class="empty">불러오는 중…</div>';
   try {
@@ -424,6 +463,9 @@ function renderReports(){
   const q = (document.getElementById('rSearch').value||'').trim().toLowerCase();
   const f = document.getElementById('rFilter').value;
   const items = reportCache.filter(it=>{
+    // rMode 분리: 조사보고서 = category==='조사보고서', 이슈 = 나머지
+    if (rMode==='report' && it.category !== '조사보고서') return false;
+    if (rMode==='issue'  && it.category === '조사보고서') return false;
     if (f==='open' && (it.status==='해결' || it.status==='보류')) return false;
     if (f && f!=='open' && it.status !== f) return false;
     if (q && !((it.title||'').toLowerCase().includes(q) || (it.summary||'').toLowerCase().includes(q) || (it.detail||'').toLowerCase().includes(q))) return false;
@@ -455,7 +497,7 @@ function openReport(id){
       }).join('')+
     '</div>'+
     '<div style="background:#f8fafc;border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:10px"><b style="font-size:11px;color:var(--mut)">요약</b><div style="margin-top:4px;white-space:pre-wrap;line-height:1.55;font-size:13px">'+esc(it.summary||'(없음)')+'</div></div>'+
-    '<div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:10px"><b style="font-size:11px;color:var(--mut)">상세</b><div style="margin-top:4px;white-space:pre-wrap;line-height:1.55;font-size:13px">'+esc(it.detail||'(없음)')+'</div></div>'+
+    '<div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:10px"><b style="font-size:11px;color:var(--mut)">상세</b><div style="margin-top:6px;line-height:1.65;font-size:14px;word-break:keep-all">'+(it.detail?md2html(it.detail):'(없음)')+'</div></div>'+
     '<div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:10px"><b style="font-size:11px;color:var(--mut)">변경 로그</b><div style="margin-top:4px;max-height:140px;overflow:auto">'+logHtml+'</div></div>'+
     '<div style="display:flex;gap:5px;margin-top:8px"><input id="rNote" placeholder="진행 메모" style="flex:1;padding:7px 10px;border:1px solid var(--bd);border-radius:7px;font:13px inherit"><button class="btn pri" onclick="addReportNote(\''+esc(it.id)+'\')" style="padding:7px 11px;font-size:13px;min-height:auto">＋</button></div>';
   document.getElementById('mOk').style.display='none';
