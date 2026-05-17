@@ -58,10 +58,11 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 .setup p{margin:0 0 12px;color:var(--mut);font-size:13px;line-height:1.55}
 .setup input{width:100%;padding:11px;border:1px solid var(--bd);border-radius:9px;font:14px/1 inherit;margin-bottom:10px}
 .foot{text-align:right;font-size:10px;color:var(--mut);padding:6px 14px}
-.modal{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:200;display:none;align-items:center;justify-content:center;padding:16px}
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:200;display:none;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .modal.on{display:flex}
-.modal .box{background:#fff;border-radius:13px;max-width:420px;width:100%;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}
-.modal .hd2{display:flex;align-items:center;padding:13px 16px;border-bottom:1px solid var(--bd)}
+.modal .box{background:#fff;border-radius:13px;max-width:480px;width:100%;max-height:calc(100vh - 32px);display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto 0}
+.modal .hd2{display:flex;align-items:center;padding:13px 16px;border-bottom:1px solid var(--bd);position:sticky;top:0;background:#fff;border-radius:13px 13px 0 0;z-index:2}
+.modal .bd{overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;min-height:0}
 .modal h3{margin:0;font-size:15px}
 .modal .bd{padding:14px 16px;font-size:14px;line-height:1.6}
 .modal .ft{padding:0 16px 14px;display:flex;gap:8px;justify-content:flex-end}
@@ -84,7 +85,7 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 
 <div class="hd">
   <h1>📝 솔비 메모</h1>
-  <span class="ver" id="ver">v1.2.0</span>
+  <span class="ver" id="ver">v1.2.1</span>
   <div class="right">
     <button class="star" id="installBtn" title="앱 설치" style="display:none">⭐</button>
   </div>
