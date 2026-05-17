@@ -85,7 +85,7 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 
 <div class="hd">
   <h1>📝 솔비 메모</h1>
-  <span class="ver" id="ver">v1.5.0</span>
+  <span class="ver" id="ver">v1.5.1</span>
   <div class="right">
     <button class="star" id="installBtn" title="앱 설치" style="display:none">⭐</button>
   </div>
@@ -643,8 +643,10 @@ function renderReports(){
   if (!items.length) { el.innerHTML='<div class="empty">'+(reportCache.length?'검색 결과 없음':'이슈 없음')+'</div>'; return; }
   el.innerHTML = items.map(it=>{
     const upd = it.updatedAt ? new Date(it.updatedAt).toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'}) : '';
+    const cmtN = it.commentsCount||0;
+    const cmtBadge = cmtN ? '<span class="badge" style="background:#dbeafe;color:#1e3a8a">💬 '+cmtN+'</span>' : '';
     return '<div class="issue-card" onclick="openReport(\''+esc(it.id)+'\')">'+
-      '<div style="margin-bottom:5px"><span class="badge b-'+esc(it.status)+'">'+esc(it.status)+'</span><span class="badge b-cat">'+esc(it.category)+'</span><span style="color:var(--mut);font-size:11px;float:right">'+upd+'</span></div>'+
+      '<div style="margin-bottom:5px"><span class="badge b-'+esc(it.status)+'">'+esc(it.status)+'</span><span class="badge b-cat">'+esc(it.category)+'</span>'+cmtBadge+'<span style="color:var(--mut);font-size:11px;float:right">'+upd+'</span></div>'+
       '<div style="font-weight:600;font-size:14px;line-height:1.4;margin-bottom:3px">'+esc(it.title)+'</div>'+
       (it.summary?'<div style="color:var(--mut);font-size:12px;line-height:1.45;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">'+esc(it.summary)+'</div>':'')+
     '</div>';
@@ -665,8 +667,19 @@ function openReport(id){
     '</div>'+
     '<div style="background:#f8fafc;border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:10px"><b style="font-size:11px;color:var(--mut)">요약</b><div style="margin-top:4px;white-space:pre-wrap;line-height:1.55;font-size:13px">'+esc(it.summary||'(없음)')+'</div></div>'+
     '<div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:10px"><b style="font-size:11px;color:var(--mut)">상세</b><div style="margin-top:6px;line-height:1.65;font-size:14px;word-break:keep-all">'+(it.detail?md2html(it.detail):'(없음)')+'</div></div>'+
-    '<div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:10px"><b style="font-size:11px;color:var(--mut)">변경 로그</b><div style="margin-top:4px;max-height:140px;overflow:auto">'+logHtml+'</div></div>'+
-    '<div style="display:flex;gap:5px;margin-top:8px"><input id="rNote" placeholder="진행 메모" style="flex:1;padding:7px 10px;border:1px solid var(--bd);border-radius:7px;font:13px inherit"><button class="btn pri" onclick="addReportNote(\''+esc(it.id)+'\')" style="padding:7px 11px;font-size:13px;min-height:auto">＋</button></div>';
+    '<div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:10px"><b style="font-size:11px;color:var(--mut)">변경 로그</b><div style="margin-top:4px;max-height:120px;overflow:auto">'+logHtml+'</div></div>'+
+    // 💬 의견 (comments) - 메모정리 시 자동 스캔 대상
+    '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px;margin-bottom:10px">'+
+      '<b style="font-size:12px;color:#1e3a8a">💬 의견 ('+(it.commentsCount||0)+') — 메모정리 시 보고서에 반영</b>'+
+      '<div id="rComments" style="margin-top:6px;max-height:200px;overflow:auto;display:flex;flex-direction:column;gap:5px">'+
+        ((it.comments||[]).slice().reverse().map(c=>{
+          const seen = c.seen ? '<span style="color:#10b981;font-size:10px">✓ 반영</span>' : '<span style="color:#f59e0b;font-size:10px">● 대기</span>';
+          return '<div style="background:#fff;border:1px solid var(--bd);border-radius:7px;padding:7px 9px;font-size:13px"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--mut);margin-bottom:3px"><span>'+esc(c.displayTime||c.ts)+'</span>'+seen+'</div><div style="white-space:pre-wrap;line-height:1.5">'+esc(c.text)+'</div></div>';
+        }).join('') || '<div style="color:var(--mut);font-size:12px;text-align:center;padding:8px">아직 의견 없음 — 아래에서 첫 의견 적어보세요</div>')+
+      '</div>'+
+      '<div style="display:flex;gap:5px;margin-top:8px"><input id="rCmt" placeholder="의견 입력 → 메모정리 때 자동 반영" style="flex:1;padding:7px 10px;border:1px solid var(--bd);border-radius:7px;font:13px inherit"><button class="btn pri" onclick="addReportComment(\''+esc(it.id)+'\')" style="padding:7px 12px;font-size:13px;min-height:auto">💬 의견</button></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:5px;margin-top:8px"><input id="rNote" placeholder="진행 메모(로그)" style="flex:1;padding:7px 10px;border:1px solid var(--bd);border-radius:7px;font:13px inherit"><button class="btn" onclick="addReportNote(\''+esc(it.id)+'\')" style="padding:7px 11px;font-size:13px;min-height:auto">＋ 로그</button></div>';
   document.getElementById('mOk').style.display='none';
   document.getElementById('modal').classList.add('on');
 }
@@ -680,6 +693,15 @@ async function addReportNote(id){
   if (!note) { toast('메모 입력'); return; }
   try { const r = await callApi('updateIssue', { id, note }); if (r && r.ok) { toast('로그 추가됨'); refreshReports(); setTimeout(()=>openReport(id),300); } }
   catch(e) { toast('실패: '+e.message); }
+}
+async function addReportComment(id){
+  const text = document.getElementById('rCmt').value.trim();
+  if (!text) { toast('의견 입력'); return; }
+  try {
+    const r = await callApi('addComment', { id, text });
+    if (r && r.ok) { toast('💬 의견 등록 — 메모정리 때 보고서 자동 반영'); refreshReports(); setTimeout(()=>openReport(id),300); }
+    else toast('실패: '+(r&&r.error));
+  } catch(e) { toast('실패: '+e.message); }
 }
 
 // callApi 에 listIssues, updateIssue 도 GET 으로 가능하게 패치
