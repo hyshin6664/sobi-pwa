@@ -85,7 +85,7 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 
 <div class="hd">
   <h1>📝 솔비 메모</h1>
-  <span class="ver" id="ver">v1.3.0</span>
+  <span class="ver" id="ver">v1.4.0</span>
   <div class="right">
     <button class="star" id="installBtn" title="앱 설치" style="display:none">⭐</button>
   </div>
@@ -103,6 +103,15 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
       <textarea id="memoText" placeholder="아이디어·일정·기억할 것·특이사항 — 두서없이 던지세요."></textarea>
       <div class="rec-bar" id="recBar"><span class="rec-dot"></span><span>녹음 중 — <span id="recTime">00:00</span></span></div>
       <div class="transcript" id="transcript"></div>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn" onclick="captureLoc()" id="locBtn" style="padding:7px 11px;font-size:13px">📍 위치</button>
+        <label class="btn" style="padding:7px 11px;font-size:13px;cursor:pointer">📎 사진
+          <input id="imgInput" type="file" accept="image/*" multiple onchange="onImgPick(event)" style="display:none">
+        </label>
+        <button class="btn" onclick="clearAttach()" id="clearAttachBtn" style="padding:7px 11px;font-size:13px;display:none">✕ 첨부 해제</button>
+      </div>
+      <div id="locInfo" style="display:none;margin-top:8px;padding:7px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;color:#1e3a8a;font-size:12px"></div>
+      <div id="imgPreview" style="display:none;margin-top:8px;gap:6px;flex-wrap:wrap"></div>
     </div>
 
     <div class="card">
@@ -357,19 +366,25 @@ async function saveMemo(){
   document.getElementById('transcript').textContent='';
   transcriptBuf=''; audioBlob=null; mediaChunks=[];
   toast('저장 중…');
+  const localImgs = pendingImages.slice();
+  const localLoc = currentLoc;
   const payload = { text, transcript, source: la?'voice':'text', durationSec: ld };
+  if (localLoc) payload.location = localLoc;
   // 텍스트 메타 먼저 저장 (audio 없이) — POST 본문 손실 영향 없는 쿼리만으로 가능
   try {
     const r = await callApi('saveMemo', payload);
-    if (la) {
-      // 메모 id 반환받음 — audio 청크 업로드
-      toast('🎙 오디오 업로드 중…');
-      const b64 = await blobToBase64(la);
-      await uploadAudioChunks(r.id, b64, lm);
-      toast('✅ 저장됨 (음성 포함)');
-    } else {
-      toast('✅ 저장됨');
+    const tasks = [];
+    if (la) tasks.push(['🎙 오디오 업로드', async()=>{ const b64=await blobToBase64(la); await uploadAudioChunks(r.id, b64, lm); }]);
+    if (localImgs.length) {
+      localImgs.forEach((p,idx)=>tasks.push(['📎 사진 '+(idx+1)+'/'+localImgs.length, async()=>uploadImageChunks(r.id, p.blob, p.mime)]));
     }
+    for (const [label, fn] of tasks) { toast(label+' 중…'); await fn(); }
+    const extras = [];
+    if (la) extras.push('음성');
+    if (localImgs.length) extras.push('사진'+localImgs.length);
+    if (localLoc) extras.push('위치');
+    toast('✅ 저장됨' + (extras.length?' ('+extras.join('+')+')':''));
+    clearAttach();
     refreshMemos();
   } catch(e) {
     toast('실패: '+e.message);
@@ -377,6 +392,83 @@ async function saveMemo(){
   } finally {
     saving=false; saveBtn.disabled=false;
   }
+}
+
+// ===== 위치 캡처 =====
+let currentLoc = null;
+function captureLoc(){
+  if (!navigator.geolocation) { toast('위치 미지원 브라우저'); return; }
+  const btn = document.getElementById('locBtn');
+  btn.textContent = '📍 캡처 중…'; btn.disabled = true;
+  navigator.geolocation.getCurrentPosition(pos => {
+    currentLoc = {
+      lat: +pos.coords.latitude.toFixed(6),
+      lng: +pos.coords.longitude.toFixed(6),
+      accuracy: Math.round(pos.coords.accuracy || 0),
+      capturedAt: new Date().toISOString()
+    };
+    const el = document.getElementById('locInfo');
+    el.style.display = 'block';
+    el.innerHTML = '📍 <b>'+currentLoc.lat+', '+currentLoc.lng+'</b> ±'+currentLoc.accuracy+'m <a href="https://maps.google.com/?q='+currentLoc.lat+','+currentLoc.lng+'" target="_blank" style="color:#3b82f6">지도</a>';
+    btn.textContent = '📍 위치 ✓'; btn.disabled = false;
+    document.getElementById('clearAttachBtn').style.display = '';
+    toast('위치 캡처됨');
+  }, err => {
+    btn.textContent = '📍 위치'; btn.disabled = false;
+    toast('위치 실패: ' + err.message);
+  }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+}
+
+// ===== 이미지 첨부 =====
+let pendingImages = []; // { blob, mime, name, dataUrl }
+async function onImgPick(ev){
+  const files = ev.target.files;
+  if (!files || !files.length) return;
+  for (const f of files) {
+    if (!f.type.startsWith('image/')) continue;
+    const dataUrl = await new Promise(r => { const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(f); });
+    pendingImages.push({ blob:f, mime:f.type, name:f.name, dataUrl, size:f.size });
+  }
+  renderImgPreview();
+  document.getElementById('clearAttachBtn').style.display = '';
+  ev.target.value = ''; // 같은 파일 다시 선택 가능하게
+}
+function renderImgPreview(){
+  const el = document.getElementById('imgPreview');
+  if (!pendingImages.length) { el.style.display='none'; return; }
+  el.style.display = 'flex';
+  el.innerHTML = pendingImages.map((p,i)=>
+    '<div style="position:relative"><img src="'+p.dataUrl+'" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--bd)"><button onclick="removeImg('+i+')" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border:none;border-radius:50%;background:#ef4444;color:#fff;font-size:12px;cursor:pointer;line-height:1">×</button></div>'
+  ).join('');
+}
+function removeImg(i){ pendingImages.splice(i,1); renderImgPreview(); }
+function clearAttach(){
+  currentLoc = null; pendingImages = [];
+  document.getElementById('locInfo').style.display='none';
+  document.getElementById('imgPreview').style.display='none';
+  document.getElementById('imgPreview').innerHTML='';
+  document.getElementById('locBtn').textContent = '📍 위치';
+  document.getElementById('clearAttachBtn').style.display='none';
+  toast('첨부 해제');
+}
+async function blobToBase64(blob){
+  return new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result.split(',')[1]); fr.readAsDataURL(blob); });
+}
+// 이미지 청크 업로드 (audio 패턴 그대로 + image* API)
+async function uploadImageChunks(memoId, blob, mime){
+  const b64 = await blobToBase64(blob);
+  const CHUNK = 5000;
+  const init = await callApi('imageInit', {});
+  const sid = init.sid;
+  const total = Math.ceil(b64.length / CHUNK);
+  for (let i = 0; i < total; i++) {
+    const part = b64.slice(i*CHUNK, (i+1)*CHUNK);
+    const r = await callApi('imageChunk', { sid, seq:i, data:part });
+    if (r.error) throw new Error('img chunk '+i+': '+r.error);
+  }
+  const fin = await callApi('imageFinal', { sid, memoId, mime });
+  if (fin.error) throw new Error('img final: '+fin.error);
+  return fin;
 }
 
 // 오디오 청크 업로드 — callApi POST 경로 사용 (작은 body는 redirect 손실 없음)
