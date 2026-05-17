@@ -85,7 +85,7 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 
 <div class="hd">
   <h1>📝 솔비 메모</h1>
-  <span class="ver" id="ver">v1.7.0</span>
+  <span class="ver" id="ver">v1.8.0</span>
   <div class="right">
     <button class="star" id="installBtn" title="앱 설치" style="display:none">⭐</button>
   </div>
@@ -791,6 +791,28 @@ function md2html(s){
   h = h.replace(/\n/g, '<br>');
   return h;
 }
+// 보고서 detail → 독립 iframe 용 self-contained HTML
+function buildIsolatedDoc(md){
+  const body = md2html(md);
+  return '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+
+    'html,body{margin:0;padding:14px;font:14px/1.65 -apple-system,Pretendard,Segoe UI,sans-serif;color:#0f172a;background:#fff;word-break:keep-all}'+
+    'img{max-width:100%;border-radius:8px;margin:6px 0;display:block}'+
+    'a{color:#3b82f6}'+
+    'table{border-collapse:collapse;width:100%;margin:8px 0;font-size:13px}'+
+    'th,td{border:1px solid #e2e8f0;padding:6px 9px;text-align:left}'+
+    'th{background:#f8fafc}'+
+    'b,strong{font-weight:700}'+
+    '</style></head><body>'+body+
+    '<script>addEventListener("load",()=>{parent.postMessage({sobiFrameHeight:document.documentElement.scrollHeight+20},"*")})<\/script>'+
+    '</body></html>';
+}
+addEventListener('message', e => {
+  if (e.data && e.data.sobiFrameHeight) {
+    const f = document.getElementById('rDetailFrame');
+    if (f) f.style.height = e.data.sobiFrameHeight + 'px';
+  }
+});
+
 async function refreshReports(){
   document.getElementById('rList').innerHTML = '<div class="empty">불러오는 중…</div>';
   try {
@@ -839,7 +861,11 @@ function openReport(id){
       }).join('')+
     '</div>'+
     '<div style="background:#f8fafc;border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:10px"><b style="font-size:11px;color:var(--mut)">요약</b><div style="margin-top:4px;white-space:pre-wrap;line-height:1.55;font-size:13px">'+esc(it.summary||'(없음)')+'</div></div>'+
-    '<div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:10px"><b style="font-size:11px;color:var(--mut)">상세</b><div style="margin-top:6px;line-height:1.65;font-size:14px;word-break:keep-all">'+(it.detail?md2html(it.detail):'(없음)')+'</div></div>'+
+    '<div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:10px"><b style="font-size:11px;color:var(--mut)">상세 (독립 iframe)</b>'+
+      '<iframe id="rDetailFrame" sandbox="allow-popups allow-popups-to-escape-sandbox" style="width:100%;border:0;margin-top:6px;background:#fff;min-height:400px" srcdoc=\''+
+        (it.detail ? buildIsolatedDoc(it.detail).replace(/\'/g,'&#39;') : buildIsolatedDoc('(없음)').replace(/\'/g,'&#39;'))+
+      '\'></iframe>'+
+    '</div>'+
     '<div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:10px"><b style="font-size:11px;color:var(--mut)">변경 로그</b><div style="margin-top:4px;max-height:120px;overflow:auto">'+logHtml+'</div></div>'+
     // 💬 의견 (comments) - 메모정리 시 자동 스캔 대상
     '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px;margin-bottom:10px">'+
