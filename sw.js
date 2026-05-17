@@ -1,6 +1,6 @@
 // 솔비 메모 PWA — Service Worker
 // index.html은 네트워크 우선(최신 반영), 정적 자원만 cache-first
-const CACHE = 'sobi-memo-v2';
+const CACHE = 'sobi-memo-v3';
 const ASSETS = ['./manifest.json', './icon-192.svg', './icon-512.svg'];
 
 self.addEventListener('install', e => {

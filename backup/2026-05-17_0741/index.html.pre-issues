@@ -65,71 +65,33 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 .modal h3{margin:0;font-size:15px}
 .modal .bd{padding:14px 16px;font-size:14px;line-height:1.6}
 .modal .ft{padding:0 16px 14px;display:flex;gap:8px;justify-content:flex-end}
-.tabs{display:flex;gap:4px;background:var(--card);border-bottom:1px solid var(--bd);padding:6px 10px;position:sticky;top:48px;z-index:9}
-.tab{flex:1;padding:8px 6px;text-align:center;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;color:var(--mut);background:transparent;border:none}
-.tab.on{background:var(--blue);color:#fff}
-.pane{display:none}
-.pane.on{display:block}
-.issue-card{padding:11px 13px;background:#fff;border:1px solid var(--bd);border-radius:9px;margin-bottom:8px;cursor:pointer}
-.issue-card:active{background:#f8fafc}
-.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;margin-right:6px}
-.b-미해결{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
-.b-진행중{background:#fef3c7;color:#92400e;border:1px solid #fde68a}
-.b-해결{background:#dcfce7;color:#166534;border:1px solid #bbf7d0}
-.b-보류{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1}
-.b-cat{background:#f1f5f9;color:#475569;font-weight:500}
 </style>
 </head>
 <body>
 
 <div class="hd">
   <h1>📝 솔비 메모</h1>
-  <span class="ver" id="ver">v1.1.0</span>
+  <span class="ver" id="ver">v1.0.1</span>
   <div class="right">
     <button class="star" id="installBtn" title="앱 설치" style="display:none">⭐</button>
   </div>
 </div>
 
-<div class="tabs">
-  <button class="tab on" data-pane="paneMemo" onclick="pwaTab(this)">📝 메모</button>
-  <button class="tab" data-pane="paneReport" onclick="pwaTab(this)">📑 보고서</button>
-</div>
-
 <div class="body">
-  <div class="pane on" id="paneMemo">
-    <div class="hint">💡 정리는 Claude Code에서 <code>/메모정리</code></div>
-    <div class="card">
-      <textarea id="memoText" placeholder="아이디어·일정·기억할 것·특이사항 — 두서없이 던지세요."></textarea>
-      <div class="rec-bar" id="recBar"><span class="rec-dot"></span><span>녹음 중 — <span id="recTime">00:00</span></span></div>
-      <div class="transcript" id="transcript"></div>
-    </div>
-
-    <div class="card">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><b>대기 큐</b><span id="memoCount" style="margin-left:auto;color:var(--mut);font-size:12px">-</span></div>
-      <div class="list" id="memoList"><div class="empty">불러오는 중…</div></div>
-    </div>
+  <div class="hint">💡 정리는 Claude Code에서 <code>/메모정리</code></div>
+  <div class="card">
+    <textarea id="memoText" placeholder="아이디어·일정·기억할 것·특이사항 — 두서없이 던지세요."></textarea>
+    <div class="rec-bar" id="recBar"><span class="rec-dot"></span><span>녹음 중 — <span id="recTime">00:00</span></span></div>
+    <div class="transcript" id="transcript"></div>
   </div>
 
-  <div class="pane" id="paneReport">
-    <div class="card">
-      <div style="display:flex;gap:6px;margin-bottom:8px">
-        <input id="rSearch" placeholder="검색" oninput="renderReports()" style="flex:1;padding:9px 11px;border:1px solid var(--bd);border-radius:8px;font:14px inherit">
-        <select id="rFilter" onchange="renderReports()" style="padding:8px;border:1px solid var(--bd);border-radius:8px;font:13px inherit;background:#fff">
-          <option value="open">활성</option>
-          <option value="">전체</option>
-          <option value="미해결">미해결</option>
-          <option value="진행중">진행중</option>
-          <option value="해결">해결</option>
-          <option value="보류">보류</option>
-        </select>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px"><b>이슈 / 보고서</b><span id="rCount" style="margin-left:auto;color:var(--mut);font-size:12px">-</span></div>
-    </div>
-    <div id="rList"><div class="empty">불러오는 중…</div></div>
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><b>대기 큐</b><span id="memoCount" style="margin-left:auto;color:var(--mut);font-size:12px">-</span></div>
+    <div class="list" id="memoList"><div class="empty">불러오는 중…</div></div>
   </div>
 </div>
 
-<div class="acts" id="memoActs">
+<div class="acts">
   <button class="btn rec" id="recBtn" onclick="toggleRec()" style="flex:0 0 auto">🎙</button>
   <button class="btn pri" id="saveBtn" onclick="saveMemo()">💾 저장</button>
 </div>
@@ -242,9 +204,8 @@ async function callApi(action, data){
   const qs = '?api=' + encodeURIComponent(action) + '&token=' + encodeURIComponent(API_TOKEN);
   const url = API_URL + qs;
   // 작은 페이로드는 GET 만으로 끝(리다이렉트 영향 0)
-  const READ_GET = ['ping','listMemos','deleteMemo','getProgress','getRecentActivity','listPersonal','listIssues','getIssue'];
   const small = !data || !data.audioBase64;
-  if (small && READ_GET.indexOf(action) >= 0) {
+  if (small && (action==='ping' || action==='listMemos' || action==='deleteMemo' || action==='getProgress')) {
     let g = url;
     if (data && data.id) g += '&id=' + encodeURIComponent(data.id);
     if (data && data.limit) g += '&limit=' + data.limit;
@@ -398,88 +359,5 @@ function delMemo(id, btn){
 }
 
 if (API_URL && API_TOKEN) refreshMemos();
-
-// ===== 탭 전환 =====
-function pwaTab(el){
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
-  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('on'));
-  el.classList.add('on');
-  document.getElementById(el.dataset.pane).classList.add('on');
-  const isMemo = el.dataset.pane==='paneMemo';
-  document.getElementById('memoActs').style.display = isMemo ? 'flex' : 'none';
-  if (el.dataset.pane==='paneReport') refreshReports();
-}
-
-// ===== 보고서 =====
-let reportCache = [];
-async function refreshReports(){
-  document.getElementById('rList').innerHTML = '<div class="empty">불러오는 중…</div>';
-  try {
-    const r = await callApi('listIssues', {});
-    reportCache = r.items || [];
-    renderReports();
-  } catch(e) { document.getElementById('rList').innerHTML = '<div class="empty">로드 실패: '+esc(e.message)+'</div>'; }
-}
-function renderReports(){
-  const q = (document.getElementById('rSearch').value||'').trim().toLowerCase();
-  const f = document.getElementById('rFilter').value;
-  const items = reportCache.filter(it=>{
-    if (f==='open' && (it.status==='해결' || it.status==='보류')) return false;
-    if (f && f!=='open' && it.status !== f) return false;
-    if (q && !((it.title||'').toLowerCase().includes(q) || (it.summary||'').toLowerCase().includes(q) || (it.detail||'').toLowerCase().includes(q))) return false;
-    return true;
-  });
-  document.getElementById('rCount').textContent = items.length+'건'+(items.length<reportCache.length?' / '+reportCache.length:'');
-  const el = document.getElementById('rList');
-  if (!items.length) { el.innerHTML='<div class="empty">'+(reportCache.length?'검색 결과 없음':'이슈 없음')+'</div>'; return; }
-  el.innerHTML = items.map(it=>{
-    const upd = it.updatedAt ? new Date(it.updatedAt).toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'}) : '';
-    return '<div class="issue-card" onclick="openReport(\''+esc(it.id)+'\')">'+
-      '<div style="margin-bottom:5px"><span class="badge b-'+esc(it.status)+'">'+esc(it.status)+'</span><span class="badge b-cat">'+esc(it.category)+'</span><span style="color:var(--mut);font-size:11px;float:right">'+upd+'</span></div>'+
-      '<div style="font-weight:600;font-size:14px;line-height:1.4;margin-bottom:3px">'+esc(it.title)+'</div>'+
-      (it.summary?'<div style="color:var(--mut);font-size:12px;line-height:1.45;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">'+esc(it.summary)+'</div>':'')+
-    '</div>';
-  }).join('');
-}
-function openReport(id){
-  const it = reportCache.find(x=>x.id===id);
-  if (!it) { toast('못 찾음'); return; }
-  document.getElementById('mt').innerHTML = '📑 '+esc(it.title);
-  const logHtml = (it.log||'').split('\n').filter(Boolean).reverse().map(l=>'<div style="padding:3px 0;border-bottom:1px dashed #eef2f7;font-size:12px">'+esc(l)+'</div>').join('') || '<div style="color:var(--mut);font-size:12px">로그 없음</div>';
-  document.getElementById('mb').innerHTML =
-    '<div style="margin-bottom:10px"><span class="badge b-'+esc(it.status)+'">'+esc(it.status)+'</span><span class="badge b-cat">'+esc(it.category)+'</span></div>'+
-    '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px">'+
-      ['미해결','진행중','해결','보류'].map(st=>{
-        const cur = st===it.status;
-        return '<button class="btn" onclick="changeReport(\''+esc(it.id)+'\',\''+st+'\')" style="padding:6px 10px;font-size:12px;min-height:auto'+(cur?';background:#3b82f6;color:#fff;border-color:#3b82f6':'')+'">'+st+'</button>';
-      }).join('')+
-    '</div>'+
-    '<div style="background:#f8fafc;border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:10px"><b style="font-size:11px;color:var(--mut)">요약</b><div style="margin-top:4px;white-space:pre-wrap;line-height:1.55;font-size:13px">'+esc(it.summary||'(없음)')+'</div></div>'+
-    '<div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:10px"><b style="font-size:11px;color:var(--mut)">상세</b><div style="margin-top:4px;white-space:pre-wrap;line-height:1.55;font-size:13px">'+esc(it.detail||'(없음)')+'</div></div>'+
-    '<div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:10px"><b style="font-size:11px;color:var(--mut)">변경 로그</b><div style="margin-top:4px;max-height:140px;overflow:auto">'+logHtml+'</div></div>'+
-    '<div style="display:flex;gap:5px;margin-top:8px"><input id="rNote" placeholder="진행 메모" style="flex:1;padding:7px 10px;border:1px solid var(--bd);border-radius:7px;font:13px inherit"><button class="btn pri" onclick="addReportNote(\''+esc(it.id)+'\')" style="padding:7px 11px;font-size:13px;min-height:auto">＋</button></div>';
-  document.getElementById('mOk').style.display='none';
-  document.getElementById('modal').classList.add('on');
-}
-function closeReportModal(){ document.getElementById('mOk').style.display=''; closeModal(); }
-async function changeReport(id, status){
-  try { const r = await callApi('updateIssue', { id, status }); if (r && r.ok) { toast('변경: '+status); refreshReports(); setTimeout(()=>openReport(id),300); } }
-  catch(e) { toast('실패: '+e.message); }
-}
-async function addReportNote(id){
-  const note = document.getElementById('rNote').value.trim();
-  if (!note) { toast('메모 입력'); return; }
-  try { const r = await callApi('updateIssue', { id, note }); if (r && r.ok) { toast('로그 추가됨'); refreshReports(); setTimeout(()=>openReport(id),300); } }
-  catch(e) { toast('실패: '+e.message); }
-}
-
-// callApi 에 listIssues, updateIssue 도 GET 으로 가능하게 패치
-const _origCallApi = callApi;
-async function callApiV2(action, data){
-  const small = !data || (!data.audioBase64 && !data.detail && !data.summary);
-  const READ_GET = ['ping','listMemos','deleteMemo','getProgress','getRecentActivity','listPersonal','listIssues','getIssue'];
-  if (small && READ_GET.indexOf(action) >= 0) return _origCallApi(action, data);
-  return _origCallApi(action, data);
-}
 </script>
 </body></html>
