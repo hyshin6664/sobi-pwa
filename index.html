@@ -379,19 +379,16 @@ async function saveMemo(){
   }
 }
 
-// 오디오 청크 업로드 (GET 쿼리만 사용 → POST 302 본문 손실 우회)
+// 오디오 청크 업로드 — callApi POST 경로 사용 (작은 body는 redirect 손실 없음)
 async function uploadAudioChunks(memoId, b64, mime){
-  const CHUNK = 3500; // 안전선: URL 전체 ~5KB 이내
+  const CHUNK = 5000; // POST body ~5KB
   const init = await callApi('audioInit', {});
   const sid = init.sid;
   const total = Math.ceil(b64.length / CHUNK);
   for (let i = 0; i < total; i++) {
     const part = b64.slice(i*CHUNK, (i+1)*CHUNK);
-    const u = API_URL + '?api=audioChunk&token=' + encodeURIComponent(API_TOKEN) +
-      '&sid=' + sid + '&seq=' + i + '&data=' + encodeURIComponent(part);
-    const r = await fetch(u);
-    const j = await r.json();
-    if (j.error) throw new Error('chunk '+i+': '+j.error);
+    const r = await callApi('audioChunk', { sid, seq:i, data:part });
+    if (r.error) throw new Error('chunk '+i+': '+r.error);
   }
   const fin = await callApi('audioFinal', { sid, memoId, mime });
   if (fin.error) throw new Error('final: '+fin.error);
