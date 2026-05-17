@@ -85,7 +85,7 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 
 <div class="hd">
   <h1>📝 솔비 메모</h1>
-  <span class="ver" id="ver">v1.4.1</span>
+  <span class="ver" id="ver">v1.5.0</span>
   <div class="right">
     <button class="star" id="installBtn" title="앱 설치" style="display:none">⭐</button>
   </div>
@@ -108,10 +108,14 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
         <label class="btn" style="padding:7px 11px;font-size:13px;cursor:pointer">📎 사진
           <input id="imgInput" type="file" accept="image/*" multiple onchange="onImgPick(event)" style="display:none">
         </label>
+        <label class="btn" style="padding:7px 11px;font-size:13px;cursor:pointer">📄 파일
+          <input id="fileInput" type="file" multiple onchange="onFilePick(event)" style="display:none">
+        </label>
         <button class="btn" onclick="clearAttach()" id="clearAttachBtn" style="padding:7px 11px;font-size:13px;display:none">✕ 첨부 해제</button>
       </div>
       <div id="locInfo" style="display:none;margin-top:8px;padding:7px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;color:#1e3a8a;font-size:12px"></div>
       <div id="imgPreview" style="display:none;margin-top:8px;gap:6px;flex-wrap:wrap"></div>
+      <div id="filePreview" style="display:none;margin-top:8px;flex-direction:column;gap:4px"></div>
     </div>
 
     <div class="card">
@@ -367,6 +371,7 @@ async function saveMemo(){
   transcriptBuf=''; audioBlob=null; mediaChunks=[];
   toast('저장 중…');
   const localImgs = pendingImages.slice();
+  const localFiles = pendingFiles.slice();
   const localLoc = currentLoc;
   const payload = { text, transcript, source: la?'voice':'text', durationSec: ld };
   if (localLoc) payload.location = localLoc;
@@ -378,10 +383,14 @@ async function saveMemo(){
     if (localImgs.length) {
       localImgs.forEach((p,idx)=>tasks.push(['📎 사진 '+(idx+1)+'/'+localImgs.length, async()=>uploadImageChunks(r.id, p.blob, p.mime)]));
     }
+    if (localFiles.length) {
+      localFiles.forEach((p,idx)=>tasks.push(['📄 파일 '+(idx+1)+'/'+localFiles.length+' '+p.name, async()=>uploadFileChunks(r.id, p.blob, p.mime, p.name)]));
+    }
     for (const [label, fn] of tasks) { toast(label+' 중…'); await fn(); }
     const extras = [];
     if (la) extras.push('음성');
     if (localImgs.length) extras.push('사진'+localImgs.length);
+    if (localFiles.length) extras.push('파일'+localFiles.length);
     if (localLoc) extras.push('위치');
     toast('✅ 저장됨' + (extras.length?' ('+extras.join('+')+')':''));
     clearAttach();
@@ -443,10 +452,12 @@ function renderImgPreview(){
 }
 function removeImg(i){ pendingImages.splice(i,1); renderImgPreview(); }
 function clearAttach(){
-  currentLoc = null; pendingImages = [];
+  currentLoc = null; pendingImages = []; pendingFiles = [];
   document.getElementById('locInfo').style.display='none';
   document.getElementById('imgPreview').style.display='none';
   document.getElementById('imgPreview').innerHTML='';
+  const fp = document.getElementById('filePreview');
+  if (fp) { fp.style.display='none'; fp.innerHTML=''; }
   document.getElementById('locBtn').textContent = '📍 위치';
   document.getElementById('clearAttachBtn').style.display='none';
   toast('첨부 해제');
@@ -454,6 +465,45 @@ function clearAttach(){
 async function blobToBase64(blob){
   return new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result.split(',')[1]); fr.readAsDataURL(blob); });
 }
+// ===== 일반 파일 첨부 (PDF·엑셀·한글·docx 등) =====
+let pendingFiles = []; // { blob, mime, name, size }
+function onFilePick(ev){
+  const files = ev.target.files;
+  if (!files || !files.length) return;
+  for (const f of files) {
+    pendingFiles.push({ blob:f, mime:f.type || 'application/octet-stream', name:f.name, size:f.size });
+  }
+  renderFilePreview();
+  document.getElementById('clearAttachBtn').style.display = '';
+  ev.target.value = '';
+}
+function fmtBytes(n){ if (n<1024) return n+'B'; if (n<1024*1024) return (n/1024).toFixed(1)+'KB'; return (n/1024/1024).toFixed(2)+'MB'; }
+function renderFilePreview(){
+  const el = document.getElementById('filePreview');
+  if (!pendingFiles.length) { el.style.display='none'; return; }
+  el.style.display = 'flex';
+  el.innerHTML = pendingFiles.map((p,i)=>
+    '<div style="display:flex;align-items:center;gap:6px;padding:5px 9px;background:#f8fafc;border:1px solid var(--bd);border-radius:7px;font-size:12px"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📄 '+esc(p.name)+'</span><span style="color:var(--mut)">'+fmtBytes(p.size)+'</span><button onclick="removeFile('+i+')" style="border:none;background:transparent;color:var(--err);font-size:14px;cursor:pointer">×</button></div>'
+  ).join('');
+}
+function removeFile(i){ pendingFiles.splice(i,1); renderFilePreview(); }
+// 파일 청크 업로드
+async function uploadFileChunks(memoId, blob, mime, name){
+  const b64 = await blobToBase64(blob);
+  const CHUNK = 5000;
+  const init = await callApi('fileInit', {});
+  const sid = init.sid;
+  const total = Math.ceil(b64.length / CHUNK);
+  for (let i = 0; i < total; i++) {
+    const part = b64.slice(i*CHUNK, (i+1)*CHUNK);
+    const r = await callApi('fileChunk', { sid, seq:i, data:part });
+    if (r.error) throw new Error('file chunk '+i+': '+r.error);
+  }
+  const fin = await callApi('fileFinal', { sid, memoId, mime, name });
+  if (fin.error) throw new Error('file final: '+fin.error);
+  return fin;
+}
+
 // 이미지 청크 업로드 (audio 패턴 그대로 + image* API)
 async function uploadImageChunks(memoId, blob, mime){
   const b64 = await blobToBase64(blob);
