@@ -85,8 +85,9 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 
 <div class="hd">
   <h1>📝 솔비 메모</h1>
-  <span class="ver" id="ver">v1.8.0</span>
+  <span class="ver" id="ver">v1.9.0</span>
   <div class="right">
+    <button class="star" onclick="copyContext()" title="새 Claude 세션 컨텍스트 복사" style="font-size:16px">🔗</button>
     <button class="star" id="installBtn" title="앱 설치" style="display:none">⭐</button>
   </div>
 </div>
@@ -729,6 +730,53 @@ async function toggleTodo(id, done){
     await callApi('updateIssue', { id, status: done?'해결':'미해결' });
     refreshTodos();
   } catch(e) { toast('실패: '+e.message); }
+}
+
+// ===== 🔗 새 Claude 세션 컨텍스트 복사 =====
+async function copyContext(){
+  const ctx = `[솔비 시스템 컨텍스트 — 신현식님 개인 비서]
+
+🔒 본인 전용 (hyshin@solbox.com)
+
+📂 외부 메모리 (Claude_브리프):
+   G:\\내 드라이브\\배포\\코드\\Claude_브리프\\
+   → INDEX.md → 솔비_시스템_가이드.md 순서로 읽기
+
+🌐 핵심 URL:
+   대시보드: https://script.google.com/a/macros/solbox.com/s/AKfycbwDV-kuZ7YC3xLIaomLzCxQ0doaBAmWVKHfVyZnwlnwUbAvne_xRSZHauLJmqF0LTC6/exec
+   PWA: https://hyshin6664.github.io/sobi-pwa/
+
+🗂 솔비 DB = 4개 시트:
+   1) 백필 진행 (17xtgGly-GPxa8cqXQJDbIDK2N00TotaF873RFYcgTqw)
+   2) 개인메모 (1UxrXdX7bpAUDrVyMTDDWXCT6dp_BrxHTMj1jvrDWP4g)
+   3) 이슈/솔비보고서 (1_dgvsYkcBcXbxwWiB996uWTys4ePIyTMNC6nZ903IB0)
+   4) 메모큐 (Drive: Claude_브리프/메모큐)
+
+🔌 API (토큰 본인 로그인 시 면제):
+   GET/POST /exec?api=<액션>
+   액션: saveMemo, listMemos, listPersonal, addPersonal, listIssues, addIssue, updateIssue, addComment, audioInit/Chunk/Final, imageInit/Chunk/Final, fileInit/Chunk/Final, ensureDailyReport, diag, ping
+
+📜 작업 규칙 (핵심):
+   - 솔비보고서 = addIssue(category=조사보고서/할일/지침/일일). 별도 .md 만들지 말 것
+   - 코드 수정 전 백업·버전·UPDATE_HISTORY 갱신
+   - clasp push 후 deploy -i AKfycbwDV... (고정 deployment ID)
+   - 작업 끝 슬랙 #클로드알람 C0B1YQQ34QP 한 줄
+   - 짧은 헤더+표+이모지, 긴 단락 금지
+   - 보고서 detail = iframe 독립 렌더링
+   - 외부 Anthropic API 키 사용 금지 (돈 X)
+   - 하루 사용량 20% 리미트
+
+지금 작업 시작하기 전 위 가이드 읽고 시작.`;
+  try {
+    await navigator.clipboard.writeText(ctx);
+    toast('🔗 복사됨 — 새 Claude 채팅에 붙여넣기');
+  } catch(e) {
+    // 폴백: textarea 셀렉트
+    const ta = document.createElement('textarea');
+    ta.value = ctx; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); ta.remove();
+    toast('🔗 복사됨 (폴백)');
+  }
 }
 
 // ===== 📜 지침 팝업 =====
