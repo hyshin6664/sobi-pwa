@@ -85,7 +85,7 @@ textarea#memoText:focus{outline:2px solid var(--blue);outline-offset:-1px}
 
 <div class="hd">
   <h1>📝 솔비 메모</h1>
-  <span class="ver" id="ver">v2.2.0</span>
+  <span class="ver" id="ver">v2.2.1</span>
   <div class="right">
     <button class="star" onclick="copyContext()" title="새 Claude 세션 컨텍스트 복사" style="font-size:16px">🔗</button>
     <button class="star" id="installBtn" title="앱 설치" style="display:none">⭐</button>
@@ -919,8 +919,24 @@ function renderReports(){
   }).join('');
 }
 function openReport(id){
-  const it = reportCache.find(x=>x.id===id);
-  if (!it) { toast('못 찾음'); return; }
+  // 모든 캐시에서 검색 (보고서·일일·인원 어디서 호출돼도 작동)
+  const sources = [
+    (typeof reportCache !== 'undefined' ? reportCache : []),
+    (typeof dailyAllItems !== 'undefined' ? dailyAllItems : [])
+  ];
+  let it = null;
+  for (const arr of sources) { it = arr.find(x=>x.id===id); if (it) break; }
+  if (!it) {
+    // 마지막 시도: 서버에 직접 조회
+    callApi('getIssue', { id }).then(r=>{
+      if (r && r.id) { _openReportRender(r); }
+      else toast('못 찾음');
+    }).catch(e=>toast('실패: '+e.message));
+    return;
+  }
+  _openReportRender(it);
+}
+function _openReportRender(it){
   document.getElementById('mt').innerHTML = '📑 '+esc(it.title);
   const logHtml = (it.log||'').split('\n').filter(Boolean).reverse().map(l=>'<div style="padding:3px 0;border-bottom:1px dashed #eef2f7;font-size:12px">'+esc(l)+'</div>').join('') || '<div style="color:var(--mut);font-size:12px">로그 없음</div>';
   document.getElementById('mb').innerHTML =
